@@ -1,0 +1,453 @@
+{% extends 'sismos/base.html' %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block contenido %}
+  <h1 class="h3 mb-2 fw-bold">{{ titulo }}</h1>
+  
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <p class="lead mb-0 w-75 text-secondary" style="font-size: 1.08rem;">{{ explicacion }}</p>
+    
+    {% if es_grafico_interactivo %}
+    <!-- Botón para alternar el mapa (grafico 3) -->
+    <button id="btnAlternarMapa" class="btn btn-outline-primary shadow-sm" onclick="alternarMapa()">
+      Mostrar Mapa de Fondo
+    </button>
+    {% endif %}
+  </div>
+
+  {% if es_grafico_dinamico %}
+  <!-- Panel de control interactivo en tiempo real -->
+  <div class="card shadow-sm border-0 mb-3" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #f8fafc;">
+    <div class="card-body p-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-info text-dark fw-bold">TIEMPO REAL</span>
+          <span class="fw-semibold">Parámetros Sísmicos Interactivos</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <div class="btn-group btn-group-sm" role="group" aria-label="Modo de visualización">
+            <button type="button" id="btnModoBurbujas" class="btn btn-info fw-semibold">
+              Burbujas (Mag + Profundidad + Volumen)
+            </button>
+            <button type="button" id="btnModoBarras" class="btn btn-outline-info fw-semibold">
+              Barras + Curva de Severidad
+            </button>
+          </div>
+          <a id="enlaceReporteSincronizado" class="btn btn-sm btn-warning fw-semibold"
+             href="{% url 'listado4' %}?region={{ filtros.region }}&profundidad={{ filtros.profundidad }}&mag_min={{ filtros.mag_min }}&anio_inicio={{ filtros.anio_inicio }}&anio_fin={{ filtros.anio_fin }}">
+            Ver Tabla y Exportar PDF/Excel &rarr;
+          </a>
+        </div>
+      </div>
+
+      <form id="formFiltrosDinamicos" class="row g-4 align-items-center" onsubmit="return false;">
+        <div class="col-md-3">
+          <label for="region" class="form-label small text-uppercase text-info fw-bold mb-1">Zona Tectónica</label>
+          <select id="region" name="region" class="form-select bg-dark text-white border-secondary">
+            {% for codigo, nombre in regiones %}
+              <option value="{{ codigo }}" {% if filtros.region == codigo %}selected{% endif %}>{{ nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label for="profundidad" class="form-label small text-uppercase text-info fw-bold mb-1">Régimen Hipocentral</label>
+          <select id="profundidad" name="profundidad" class="form-select bg-dark text-white border-secondary">
+            {% for codigo, nombre in profundidades %}
+              <option value="{{ codigo }}" {% if filtros.profundidad == codigo %}selected{% endif %}>{{ nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <div class="d-flex justify-content-between">
+            <label for="mag_min" class="form-label small text-uppercase text-info fw-bold mb-1">Magnitud Mín.</label>
+            <span id="badgeMag" class="badge bg-primary">≥ {{ filtros.mag_min }} Mw</span>
+          </div>
+          <input type="range" id="mag_min" name="mag_min" class="form-range"
+                 min="4.5" max="8.5" step="0.1" value="{{ filtros.mag_min }}">
+        </div>
+
+        <div class="col-md-2">
+          <div class="d-flex justify-content-between">
+            <label for="anio_inicio" class="form-label small text-uppercase text-info fw-bold mb-1">Desde Año</label>
+            <span id="badgeAnioInicio" class="badge bg-secondary">{{ filtros.anio_inicio }}</span>
+          </div>
+          <input type="range" id="anio_inicio" name="anio_inicio" class="form-range"
+                 min="1900" max="2026" step="1" value="{{ filtros.anio_inicio }}">
+        </div>
+
+        <div class="col-md-2">
+          <div class="d-flex justify-content-between">
+            <label for="anio_fin" class="form-label small text-uppercase text-info fw-bold mb-1">Hasta Año</label>
+            <span id="badgeAnioFin" class="badge bg-secondary">{{ filtros.anio_fin }}</span>
+          </div>
+          <input type="range" id="anio_fin" name="anio_fin" class="form-range"
+                 min="1900" max="2026" step="1" value="{{ filtros.anio_fin }}">
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tarjetas KPI en tiempo real -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase fw-bold">Eventos Registrados</div>
+          <div id="kpiTotalSismos" class="fs-3 fw-bold text-primary">{{ kpis.total_sismos }}</div>
+          <div class="small text-secondary"><span id="kpiAniosActivos">{{ kpis.anios_activos }}</span> años con actividad</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase fw-bold">Mayor Terremoto del Filtro</div>
+          <div id="kpiMagMax" class="fs-3 fw-bold text-danger">{{ kpis.mag_max_historica }} Mw</div>
+          <div id="kpiLugarMax" class="small text-secondary text-truncate" title="{{ kpis.lugar_max_historico }}">
+            Año {{ kpis.anio_max_mag }} — {{ kpis.lugar_max_historico }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase fw-bold">Profundidad Media</div>
+          <div id="kpiProfMedia" class="fs-3 fw-bold text-success">{{ kpis.prof_media_global }} km</div>
+          <div id="kpiRegimenTexto" class="small text-secondary">{{ filtros.etiqueta_prof }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase fw-bold">Frecuencia Media Anual</div>
+          <div id="kpiPromedioAnual" class="fs-3 fw-bold text-dark">{{ kpis.promedio_anual }}</div>
+          <div class="small text-secondary">sismos por año activo</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aviso cuando una selección de filtros no tiene datos -->
+  <div id="alertaSinDatos" class="alert alert-warning shadow-sm d-none" role="alert">
+    <strong>Sin registros para esta selección:</strong> <span id="textoSinDatos">{{ interpretacion }}</span>
+    Ajuste el deslizador de magnitud mínima o cambie el régimen de profundidad.
+  </div>
+
+  <!-- Contenedor Interactivo Plotly.js -->
+  <div id="tarjetaGraficoDinamico" class="card shadow-sm border-0 mb-3">
+    <div class="card-body p-3">
+      <div id="lienzoPlotly" data-sismos="{{ datos_json }}" style="width: 100%; height: 500px;"></div>
+    </div>
+  </div>
+
+  <!-- Identificación de variables y lectura automática -->
+  <div class="card shadow-sm border-0">
+    <div class="card-body">
+      <h2 class="h5 fw-bold text-dark">Identificación de variables y análisis sísmico en vivo</h2>
+      <p id="textoInterpretacionVivo" class="mb-2 text-primary fw-semibold">{{ interpretacion }}</p>
+      <div class="row small text-secondary mt-2">
+        <div class="col-md-6">
+          <ul class="mb-0">
+            <li><strong>Eje X (Variable Temporal):</strong> Año del evento sísmico (se invierte automáticamente de mayor a menor si <em>Desde Año &gt; Hasta Año</em>).</li>
+            <li><strong>Eje Y Principal (Severidad / Frecuencia):</strong> Magnitud máxima anual (Mw) y curva de magnitud media en el modo Burbujas; o conteo anual de eventos en el modo Barras.</li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <ul class="mb-0">
+            <li><strong>Tamaño de Burbuja (Frecuencia):</strong> Proporcional al número de sismos registrados ese año.</li>
+            <li><strong>Escala de Color (Profundidad / Severidad):</strong> En modo Burbujas indica la profundidad media en km; en modo Barras clasifica cada año según su terremoto mayor (Azul &lt; 7.0, Ámbar 7.0–7.9, Rojo ≥ 8.0 Mw).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    const contenedorPlotly = document.getElementById("lienzoPlotly");
+    let datosActuales = JSON.parse(contenedorPlotly.dataset.sismos || "[]");
+    let filtrosActuales = {
+      region: "{{ filtros.region }}",
+      profundidad: "{{ filtros.profundidad }}",
+      mag_min: parseFloat("{{ filtros.mag_min }}".replace(",", ".")),
+      anio_inicio: parseInt("{{ filtros.anio_inicio }}", 10),
+      anio_fin: parseInt("{{ filtros.anio_fin }}", 10),
+      etiqueta_region: "{{ filtros.etiqueta_region }}",
+      etiqueta_prof: "{{ filtros.etiqueta_prof }}"
+    };
+    let modoVisualizacion = "burbujas";
+    let temporizadorFetch = null;
+
+    const selectRegion = document.getElementById("region");
+    const selectProf = document.getElementById("profundidad");
+    const sliderMag = document.getElementById("mag_min");
+    const sliderInicio = document.getElementById("anio_inicio");
+    const sliderFin = document.getElementById("anio_fin");
+
+    const badgeMag = document.getElementById("badgeMag");
+    const badgeInicio = document.getElementById("badgeAnioInicio");
+    const badgeFin = document.getElementById("badgeAnioFin");
+    const enlaceReporte = document.getElementById("enlaceReporteSincronizado");
+
+    function renderizarPlotly() {
+      const alerta = document.getElementById("alertaSinDatos");
+      const tarjeta = document.getElementById("tarjetaGraficoDinamico");
+
+      if (!datosActuales || datosActuales.length === 0) {
+        alerta.classList.remove("d-none");
+        tarjeta.classList.add("d-none");
+        Plotly.purge("lienzoPlotly");
+        return;
+      }
+      alerta.classList.add("d-none");
+      tarjeta.classList.remove("d-none");
+
+      const ejeInvertido = filtrosActuales.anio_inicio > filtrosActuales.anio_fin;
+
+      const anios = datosActuales.map(d => d.year);
+      const cantidades = datosActuales.map(d => d.cantidad);
+      const magsMax = datosActuales.map(d => d.mag_max);
+      const magsProm = datosActuales.map(d => d.mag_promedio);
+      const profs = datosActuales.map(d => d.depth_promedio);
+
+      const textosHover = datosActuales.map(d =>
+        `<b>Año ${d.year}</b><br>` +
+        `<b>Mag. Máxima:</b> ${d.mag_max} Mw<br>` +
+        `<b>Epicentro Mayor:</b> ${d.lugar_max}<br>` +
+        `<b>Sismos en el año:</b> ${d.cantidad} eventos<br>` +
+        `<b>Mag. Promedio:</b> ${d.mag_promedio} Mw<br>` +
+        `<b>Profundidad Media:</b> ${d.depth_promedio} km<extra></extra>`
+      );
+
+      let trazas = [];
+      let layout = {
+        title: {
+          text: `<b>${filtrosActuales.etiqueta_region}</b> (${filtrosActuales.anio_inicio} → ${filtrosActuales.anio_fin}) | Mag ≥ ${filtrosActuales.mag_min} Mw`,
+          font: { size: 17, color: "#0f172a" },
+          x: 0.01
+        },
+        paper_bgcolor: "#ffffff",
+        plot_bgcolor: "#f8fafc",
+        margin: { t: 55, r: 75, b: 55, l: 65 },
+        hovermode: "closest",
+        hoverlabel: {
+          bgcolor: "#0f172a",
+          font: { color: "#ffffff", size: 13 }
+        },
+        xaxis: {
+          title: ejeInvertido
+            ? "<b>Año del Evento (Variable Temporal — Orden Inverso)</b>"
+            : "<b>Año del Evento (Variable Temporal)</b>",
+          gridcolor: "#e2e8f0",
+          zeroline: false,
+          autorange: ejeInvertido ? "reversed" : true
+        },
+        legend: {
+          orientation: "h",
+          yanchor: "bottom",
+          y: 1.02,
+          xanchor: "right",
+          x: 1
+        }
+      };
+
+      if (modoVisualizacion === "burbujas") {
+        const maxCant = Math.max(...cantidades, 1);
+        const tamanos = cantidades.map(c => Math.max(11, Math.min(48, 10 + (Math.sqrt(c / maxCant) * 36))));
+
+        trazas = [
+          {
+            type: "scatter",
+            x: anios,
+            y: magsProm,
+            mode: "lines",
+            name: "Magnitud Promedio Anual (Mw)",
+            line: { color: "#64748b", width: 2, dash: "dot", shape: "spline" },
+            hoverinfo: "skip"
+          },
+          {
+            type: "scatter",
+            x: anios,
+            y: magsMax,
+            mode: "markers",
+            name: "Terremoto Mayor del Año (Tamaño = N° Sismos)",
+            hovertemplate: textosHover,
+            marker: {
+              size: tamanos,
+              color: profs,
+              colorscale: "Turbo",
+              reversescale: true,
+              showscale: true,
+              opacity: 0.88,
+              line: { color: "#0f172a", width: 1.2 },
+              colorbar: {
+                title: "Prof. Media<br>(km)",
+                thickness: 14,
+                len: 0.82
+              }
+            }
+          }
+        ];
+
+        layout.yaxis = {
+          title: "<b>Magnitud Sísmica (Mw)</b>",
+          gridcolor: "#e2e8f0",
+          zeroline: false
+        };
+      } else {
+        const coloresBarras = magsMax.map(m => m >= 8.0 ? "#dc2626" : (m >= 7.0 ? "#f59e0b" : "#0284c7"));
+        trazas = [
+          {
+            type: "bar",
+            x: anios,
+            y: cantidades,
+            name: "Cantidad Anual de Sismos (Barras)",
+            marker: {
+              color: coloresBarras,
+              opacity: 0.88,
+              line: { color: "#0f172a", width: 0.6 }
+            },
+            hovertemplate: textosHover
+          },
+          {
+            type: "scatter",
+            x: anios,
+            y: magsMax,
+            yaxis: "y2",
+            mode: "lines+markers",
+            name: "Magnitud Máxima Anual (Mw)",
+            line: { color: "#0f172a", width: 2.2, shape: "spline" },
+            marker: { size: 7, color: "#dc2626", line: { color: "#ffffff", width: 1 } },
+            hovertemplate: textosHover
+          }
+        ];
+
+        layout.yaxis = {
+          title: "<b>Cantidad Anual de Sismos</b>",
+          gridcolor: "#e2e8f0",
+          zeroline: false
+        };
+        layout.yaxis2 = {
+          title: "<b>Magnitud Máxima (Mw)</b>",
+          overlaying: "y",
+          side: "right",
+          showgrid: false,
+          zeroline: false
+        };
+      }
+
+      Plotly.newPlot("lienzoPlotly", trazas, layout, {
+        responsive: true,
+        displaylogo: false
+      });
+    }
+
+    function actualizarDesdeServidor() {
+      const ini = parseInt(sliderInicio.value, 10);
+      const fin = parseInt(sliderFin.value, 10);
+
+      const params = new URLSearchParams({
+        region: selectRegion.value,
+        profundidad: selectProf.value,
+        mag_min: sliderMag.value,
+        anio_inicio: ini,
+        anio_fin: fin
+      });
+
+      enlaceReporte.href = "{% url 'listado4' %}?" + params.toString();
+
+      params.set("ajax", "1");
+      fetch("{% url 'grafico4' %}?" + params.toString())
+        .then(r => r.json())
+        .then(respuesta => {
+          datosActuales = respuesta.datos;
+          filtrosActuales = respuesta.filtros;
+
+          document.getElementById("kpiTotalSismos").textContent = respuesta.kpis.total_sismos;
+          document.getElementById("kpiAniosActivos").textContent = respuesta.kpis.anios_activos;
+          document.getElementById("kpiMagMax").textContent =
+            respuesta.kpis.mag_max_historica !== "—" ? respuesta.kpis.mag_max_historica + " Mw" : "—";
+          document.getElementById("kpiLugarMax").textContent =
+            respuesta.kpis.anio_max_mag !== "—"
+              ? `Año ${respuesta.kpis.anio_max_mag} — ${respuesta.kpis.lugar_max_historico}`
+              : "Sin registros";
+          document.getElementById("kpiProfMedia").textContent =
+            respuesta.kpis.prof_media_global !== "—" ? respuesta.kpis.prof_media_global + " km" : "—";
+          document.getElementById("kpiRegimenTexto").textContent = respuesta.filtros.etiqueta_prof;
+          document.getElementById("kpiPromedioAnual").textContent = respuesta.kpis.promedio_anual;
+
+          document.getElementById("textoInterpretacionVivo").textContent = respuesta.interpretacion;
+          document.getElementById("textoSinDatos").textContent = respuesta.interpretacion;
+
+          renderizarPlotly();
+        });
+    }
+
+    function agendarActualizacion() {
+      badgeMag.textContent = "≥ " + parseFloat(sliderMag.value).toFixed(1) + " Mw";
+      badgeInicio.textContent = sliderInicio.value;
+      badgeFin.textContent = sliderFin.value;
+
+      clearTimeout(temporizadorFetch);
+      temporizadorFetch = setTimeout(actualizarDesdeServidor, 60);
+    }
+
+    [selectRegion, selectProf, sliderMag, sliderInicio, sliderFin].forEach(control => {
+      control.addEventListener("input", agendarActualizacion);
+      control.addEventListener("change", agendarActualizacion);
+    });
+
+    document.getElementById("btnModoBurbujas").addEventListener("click", function () {
+      modoVisualizacion = "burbujas";
+      this.classList.replace("btn-outline-info", "btn-info");
+      document.getElementById("btnModoBarras").classList.replace("btn-info", "btn-outline-info");
+      renderizarPlotly();
+    });
+
+    document.getElementById("btnModoBarras").addEventListener("click", function () {
+      modoVisualizacion = "barras";
+      this.classList.replace("btn-outline-info", "btn-info");
+      document.getElementById("btnModoBurbujas").classList.replace("btn-info", "btn-outline-info");
+      renderizarPlotly();
+    });
+
+    renderizarPlotly();
+  </script>
+
+  {% else %}
+  <!-- Gráficos 1, 2 y 3 -->
+  <div class="card shadow-sm">
+    <div class="card-body text-center">
+      <img id="imagenGrafico" src="data:image/png;base64,{{ grafico }}" class="img-fluid rounded" alt="{{ titulo }}">
+    </div>
+  </div>
+  {% endif %}
+
+  {% if es_grafico_interactivo %}
+  <!-- Cambiar el src de la imagen en el Gráfico 3 -->
+  <script>
+    let mostrandoMapa = false;
+    const imgElement = document.getElementById('imagenGrafico');
+    const btnElement = document.getElementById('btnAlternarMapa');
+    
+    const srcSinMapa = "data:image/png;base64,{{ grafico }}";
+    const srcConMapa = "data:image/png;base64,{{ grafico_mapa }}";
+
+    function alternarMapa() {
+      if (!mostrandoMapa) {
+        imgElement.src = srcConMapa;
+        btnElement.textContent = "Ocultar Mapa de Fondo";
+        btnElement.classList.replace("btn-outline-primary", "btn-primary");
+      } else {
+        imgElement.src = srcSinMapa;
+        btnElement.textContent = "Mostrar Mapa de Fondo";
+        btnElement.classList.replace("btn-primary", "btn-outline-primary");
+      }
+      mostrandoMapa = !mostrandoMapa;
+    }
+  </script>
+  {% endif %}
+{% endblock %}

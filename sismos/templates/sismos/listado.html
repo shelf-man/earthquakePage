@@ -1,0 +1,203 @@
+{% extends 'sismos/base.html' %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block contenido %}
+  <h1 class="h3 mb-2 fw-bold">{{ titulo }}</h1>
+  <p id="explicacionReporte" class="lead text-secondary" style="font-size: 1.05rem;">{{ explicacion }}</p>
+
+  {% if es_reporte_dinamico %}
+  <!-- Panel de filtros en tiempo real -->
+  <div class="card shadow-sm border-0 mb-3" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #f8fafc;">
+    <div class="card-body p-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-info text-dark fw-bold">FILTRADO EN VIVO</span>
+          <span class="fw-semibold">Sincronizado con el Gráfico Dinámico</span>
+        </div>
+        <a id="btnVolverGrafico" class="btn btn-sm btn-info fw-semibold"
+           href="{% url 'grafico4' %}?region={{ filtros.region }}&profundidad={{ filtros.profundidad }}&mag_min={{ filtros.mag_min }}&anio_inicio={{ filtros.anio_inicio }}&anio_fin={{ filtros.anio_fin }}">
+          &larr; Ver esta selección en el Gráfico Interactivo
+        </a>
+      </div>
+
+      <form class="row g-4 align-items-center" onsubmit="return false;">
+        <div class="col-md-3">
+          <label for="rep_region" class="form-label small text-uppercase text-info fw-bold mb-1">Zona Tectónica</label>
+          <select id="rep_region" class="form-select bg-dark text-white border-secondary">
+            {% for codigo, nombre in regiones %}
+              <option value="{{ codigo }}" {% if filtros.region == codigo %}selected{% endif %}>{{ nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="rep_profundidad" class="form-label small text-uppercase text-info fw-bold mb-1">Régimen Hipocentral</label>
+          <select id="rep_profundidad" class="form-select bg-dark text-white border-secondary">
+            {% for codigo, nombre in profundidades %}
+              <option value="{{ codigo }}" {% if filtros.profundidad == codigo %}selected{% endif %}>{{ nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <div class="d-flex justify-content-between">
+            <label for="rep_mag" class="form-label small text-uppercase text-info fw-bold mb-1">Magnitud Mín.</label>
+            <span id="rep_badge_mag" class="badge bg-primary">≥ {{ filtros.mag_min }} Mw</span>
+          </div>
+          <input type="range" id="rep_mag" class="form-range" min="4.5" max="8.5" step="0.1" value="{{ filtros.mag_min }}">
+        </div>
+        <div class="col-md-2">
+          <div class="d-flex justify-content-between">
+            <label for="rep_inicio" class="form-label small text-uppercase text-info fw-bold mb-1">Desde Año</label>
+            <span id="rep_badge_ini" class="badge bg-secondary">{{ filtros.anio_inicio }}</span>
+          </div>
+          <input type="range" id="rep_inicio" class="form-range" min="1900" max="2026" step="1" value="{{ filtros.anio_inicio }}">
+        </div>
+        <div class="col-md-2">
+          <div class="d-flex justify-content-between">
+            <label for="rep_fin" class="form-label small text-uppercase text-info fw-bold mb-1">Hasta Año</label>
+            <span id="rep_badge_fin" class="badge bg-secondary">{{ filtros.anio_fin }}</span>
+          </div>
+          <input type="range" id="rep_fin" class="form-range" min="1900" max="2026" step="1" value="{{ filtros.anio_fin }}">
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="interpretacionReporte" class="alert alert-info shadow-sm" role="status">
+    {{ interpretacion }}
+  </div>
+  {% endif %}
+
+  <!-- Botones de exportación arriba y abajo para comodidad, manteniendo al final los obligatorios -->
+  <div class="table-responsive bg-white rounded shadow-sm border p-2">
+    <table class="table table-striped table-hover align-middle mb-0">
+      <thead class="table-dark">
+        {% if es_reporte_dinamico %}
+        <tr>
+          <th>Año</th>
+          <th>Cantidad de Sismos</th>
+          <th>Magnitud Promedio</th>
+          <th>Magnitud Máxima</th>
+          <th>Profundidad Media</th>
+          <th>Epicentro del Mayor Sismo del Año</th>
+        </tr>
+        {% else %}
+        <tr>
+          <th>Fecha/Hora</th><th>Ubicación</th><th>Magnitud</th><th>Profundidad</th>
+        </tr>
+        {% endif %}
+      </thead>
+      <tbody id="cuerpoTablaReporte">
+        {% if es_reporte_dinamico %}
+          {% for fila in datos %}
+          <tr>
+            <td class="fw-bold">{{ fila.year }}</td>
+            <td>{{ fila.cantidad }}</td>
+            <td>{{ fila.mag_promedio }} Mw</td>
+            <td><span class="badge {% if fila.mag_max >= 8.0 %}bg-danger{% elif fila.mag_max >= 7.0 %}bg-warning text-dark{% else %}bg-primary{% endif %}">{{ fila.mag_max }} Mw</span></td>
+            <td>{{ fila.depth_promedio }} km</td>
+            <td>{{ fila.lugar_max }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-4 text-muted">
+              No existen registros para la combinación de filtros seleccionada.
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          {% for sismo in datos %}
+          <tr>
+            <td>{{ sismo.time }}</td>
+            <td>{{ sismo.place }}</td>
+            <td>{{ sismo.mag }}</td>
+            <td>{{ sismo.depth }} km</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="text-center py-3">No existen registros disponibles.</td>
+          </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Botones para descargar en PDF y Excel -->
+  <div class="d-flex flex-wrap gap-2 mt-3">
+    {% if es_reporte_dinamico %}
+      <a id="btnDescargaPdf" class="btn btn-primary shadow-sm"
+         href="{% url url_pdf %}?region={{ filtros.region }}&profundidad={{ filtros.profundidad }}&mag_min={{ filtros.mag_min }}&anio_inicio={{ filtros.anio_inicio }}&anio_fin={{ filtros.anio_fin }}">
+        Descarga en PDF
+      </a>
+      <a id="btnDescargaExcel" class="btn btn-success shadow-sm"
+         href="{% url url_excel %}?region={{ filtros.region }}&profundidad={{ filtros.profundidad }}&mag_min={{ filtros.mag_min }}&anio_inicio={{ filtros.anio_inicio }}&anio_fin={{ filtros.anio_fin }}">
+        Descarga en Excel
+      </a>
+    {% else %}
+      <a class="btn btn-primary shadow-sm" href="{% url url_pdf %}">Descarga en PDF</a>
+      <a class="btn btn-success shadow-sm" href="{% url url_excel %}">Descarga en Excel</a>
+    {% endif %}
+  </div>
+
+  {% if es_reporte_dinamico %}
+  <script>
+    const repRegion = document.getElementById("rep_region");
+    const repProf = document.getElementById("rep_profundidad");
+    const repMag = document.getElementById("rep_mag");
+    const repIni = document.getElementById("rep_inicio");
+    const repFin = document.getElementById("rep_fin");
+    let timerRep = null;
+
+    function actualizarTablaEnVivo() {
+      let ini = parseInt(repIni.value);
+      let fin = parseInt(repFin.value);
+
+      const params = new URLSearchParams({
+        region: repRegion.value,
+        profundidad: repProf.value,
+        mag_min: repMag.value,
+        anio_inicio: ini,
+        anio_fin: fin
+      });
+
+      document.getElementById("btnDescargaPdf").href = "{% url url_pdf %}?" + params.toString();
+      document.getElementById("btnDescargaExcel").href = "{% url url_excel %}?" + params.toString();
+      document.getElementById("btnVolverGrafico").href = "{% url 'grafico4' %}?" + params.toString();
+
+      params.set("ajax", "1");
+      fetch("{% url 'listado4' %}?" + params.toString())
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById("explicacionReporte").textContent = data.explicacion;
+          document.getElementById("interpretacionReporte").textContent = data.interpretacion;
+
+          const tbody = document.getElementById("cuerpoTablaReporte");
+          if (!data.datos.length) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">No existen registros para la combinación de filtros seleccionada.</td></tr>`;
+            return;
+          }
+          tbody.innerHTML = data.datos.map(f => {
+            const claseBadge = f.mag_max >= 8.0 ? "bg-danger" : (f.mag_max >= 7.0 ? "bg-warning text-dark" : "bg-primary");
+            return `<tr>
+              <td class="fw-bold">${f.year}</td>
+              <td>${f.cantidad}</td>
+              <td>${f.mag_promedio} Mw</td>
+              <td><span class="badge ${claseBadge}">${f.mag_max} Mw</span></td>
+              <td>${f.depth_promedio} km</td>
+              <td>${f.lugar_max}</td>
+            </tr>`;
+          }).join("");
+        });
+    }
+
+    [repRegion, repProf, repMag, repIni, repFin].forEach(el => {
+      el.addEventListener("input", () => {
+        document.getElementById("rep_badge_mag").textContent = "≥ " + parseFloat(repMag.value).toFixed(1) + " Mw";
+        document.getElementById("rep_badge_ini").textContent = repIni.value;
+        document.getElementById("rep_badge_fin").textContent = repFin.value;
+        clearTimeout(timerRep);
+        timerRep = setTimeout(actualizarTablaEnVivo, 60);
+      });
+    });
+  </script>
+  {% endif %}
+{% endblock %}
